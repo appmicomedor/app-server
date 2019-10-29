@@ -25,9 +25,32 @@ CREATE TABLE `historial` (
 
 ALTER TABLE `historial`
   ADD PRIMARY KEY (`id`);
-
 ALTER TABLE `historial`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 ALTER TABLE `historial` ADD COLUMN `titular` varchar(512) DEFAULT NULL;
 ALTER TABLE `historial` ADD COLUMN `tipo` int(1) DEFAULT 0;
+
+CREATE TABLE `Grupo` (
+  `id` int(11) NOT NULL,
+  `userId` int(11) DEFAULT NULL,
+  `schoolId` int(11) DEFAULT NULL,    
+  `password` varchar(255) DEFAULT NULL,
+  `createdAt` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+ALTER TABLE `Grupo`
+  ADD PRIMARY KEY (`id`);
+ALTER TABLE `Grupo`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+CREATE TABLE `EstudianteGrupo` (
+  `id` int(11) NOT NULL,
+  `userId` int(11) DEFAULT NULL,
+  `groupId` int(11) DEFAULT NULL,    
+  `studentId` int(11) DEFAULT NULL,
+  `createdAt` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+ALTER TABLE `EstudianteGrupo`
+  ADD PRIMARY KEY (`id`);
+ALTER TABLE `EstudianteGrupo`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;  

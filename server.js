@@ -26,17 +26,11 @@ const bodyParser = require('body-parser');
 
 const Odoo = require('odoo-xmlrpc');
 
-
-const odoo = new Odoo({
-	url: process.env['ODOO_URL'],
-	port: process.env['ODOO_PORT'],
-	db: process.env['ODOO_DB'],
-	username: process.env['ODOO_USER'],
-	password: process.env['ODOO_PWD']
-});
-
 const DbApi = require('./lib/db-api');
 const Secure = require('./lib/secure');
+
+const secure = new Secure(process.env['TOKEN_SECRET']);
+var odoo = new Odoo(secure.odooConfigCatering(0));
 
 const corsOptions = {
 	origin: (origin, callback) => {
@@ -77,8 +71,6 @@ app.use(function (req, res, next) {
 app.get('/', function (req, res) {
 	return res.send({ error: true, message: 'hello' })
 });
-
-const secure = new Secure(process.env['TOKEN_SECRET']);
 
 const dbapi = new DbApi();
 dbapi.connect(process.env['MYSQL_HOST'], process.env['MYSQL_USER'], process.env['MYSQL_PWD'], process.env['MYSQL_DB']);
@@ -207,14 +199,15 @@ app.post('/login', function (req, res) {
 
 app.post('/get_month', function (req, res) {
 
-	if (!secure.ensureAuthenticated(req, res, req.body.student_id))
+	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.childId))
 		return res.send({ error: true, message: 'Error de autorización, token no válido' });
 
+	odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));
 	odoo.connect(function (err) {
 		if (err) return res.send({ error: true, data: err, message: 'Error conexión con backend' });
 
 		var inParams = [];
-		inParams.push([['student_id', '=', Number(req.body.student_id)], ['year', '=', req.body.year], ['month', '=', req.body.month]]);
+		inParams.push([['student_id', '=', Number(req.body.childId)], ['year', '=', req.body.year], ['month', '=', req.body.month]]);
 		odoo.execute_kw('scat.student', 'search', [inParams], function (err, value) {
 			if (err || !value || value.length == 0) { return res.send({ error: true, message: 'No hay datos ' }); }
 			var inParams = [];
@@ -258,14 +251,15 @@ app.post('/get_preaviso', function (req, res) {
 
 app.post('/get_asistencia', function (req, res) {
 
-	if (!secure.ensureAuthenticated(req, res, req.body.child_id))
+	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.childId))
 		return res.send({ error: true, message: 'Error de autorización, token no válido' });
 
+	odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));		
 	odoo.connect(function (err) {
 		if (err) return res.send({ error: true, data: err, message: 'Error conexión con backend' });
 
 		var inParams = [];
-		inParams.push([['id', '=', Number(req.body.child_id)]]);
+		inParams.push([['id', '=', Number(req.body.childId)]]);
 		odoo.execute_kw('res.partner', 'search', [inParams], function (err, value) {
 			if (err || !value || value.length == 0) { return res.send({ error: true, message: 'No hay datos ' }); }
 
@@ -283,9 +277,10 @@ app.post('/get_asistencia', function (req, res) {
 
 app.post('/set_asistencia', function (req, res) {
 
-	if (!secure.ensureAuthenticated(req, res, req.body.childId))
+	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.childId))
 		return res.send({ error: true, message: 'Error de autorización, token no válido' });
 
+	odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));
 	odoo.connect(function (err) {
 		if (err) return res.send({ error: true, data: err, message: 'Error conexión con backend' });
 
@@ -315,6 +310,10 @@ app.post('/set_asistencia', function (req, res) {
 
 app.post('/set_day', function (req, res) {
 
+	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.childId))
+		return res.send({ error: true, message: 'Error de autorización, token no válido' });
+
+	odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));		
 	odoo.connect(function (err) {
 		if (err) return res.send({ error: true, data: err, message: 'Error conexión con backend' });
 
@@ -338,7 +337,7 @@ app.post('/set_day', function (req, res) {
 
 app.post('/set_bank', function (req, res) {
 
-	if (!secure.ensureAuthenticated(req, res, req.body.parentId))
+	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.parentId))
 		return res.send({ error: true, message: 'Error de autorización, token no válido' });
 
 	odoo.connect(function (err) {
