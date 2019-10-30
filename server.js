@@ -32,6 +32,9 @@ const Secure = require('./lib/secure');
 const secure = new Secure(process.env['TOKEN_SECRET']);
 var odoo = new Odoo(secure.odooConfigCatering(0));
 
+const ResponseMgr = require('./lib/response-mgr');
+const resMgr = new ResponseMgr();
+
 const corsOptions = {
 	origin: (origin, callback) => {
 		if (allowedOrigins.includes(origin) || !origin) {
@@ -78,9 +81,8 @@ dbapi.connect(process.env['MYSQL_HOST'], process.env['MYSQL_USER'], process.env[
 // Login
 app.post('/login', function (req, res) {
 
-	//console.log('/login ' + req.body.username + ' ' + req.body.password);
 	if (!req.body.password || req.body.password.length != 6)
-		return res.send({ error: true, data: null, message: 'Contraseña no válida' });
+		return resMgr.send(req, res, true, null, 'Contraseña no válida' );
 
 	var titular = {
 		id: null,
@@ -90,6 +92,7 @@ app.post('/login', function (req, res) {
 		name: null,
 		bank: null,
 		childs: [],
+		ref: null,
 		contador_fallos: 0,
 		ultimo_acceso: null,
 		token: null
@@ -97,13 +100,13 @@ app.post('/login', function (req, res) {
 
 	var sql = "SELECT * from usuarios WHERE username = '" + req.body.username + "'";
 	dbapi.connection.query(sql, function (err, rows) {
-		if (err) return res.send({ error: true, data: err, message: 'Error conexión base de datos' });
+		if (err) return resMgr.send(req, res, true, err, 'Error conexión base de datos');
 
 		if (rows.length > 0) {
 			titular.db_id = rows[0]['id'];
 			titular.contador_fallos = rows[0]['contador_fallos'];
 
-			if (titular.contador_fallos >= 5) {
+			if (titular.contador_fallos >= 20) {
 				titular.ultimo_acceso = dbapi.toDateFormat(rows[0]['ultimo_acceso']);
 
 				let tz = 1000 * 60 * Number(new Date().getTimezoneOffset());
@@ -112,27 +115,28 @@ app.post('/login', function (req, res) {
 				let dif = now.getTime() + tz - titular.ultimo_acceso.getTime();
 				if (dif < day1) {
 					dbapi.errorAccess(titular);
-					return res.send({ error: true, data: req.body, message: "El usuario ha sido bloqueado, consulte con soporte." });
+					return resMgr.send(req, res, true, null, 'El usuario ha sido bloqueado, consulte con soporte.' );
 				}
 			}
 		}
 
 		odoo.connect(function (err) {
-			if (err) return res.send({ error: true, data: err, message: 'Error conexión con backend' });
+			if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
 			var inParams = [];
 			inParams.push([['x_ise_nie', '=', req.body.username]]);
 			odoo.execute_kw('res.partner', 'search', [inParams], function (err, value) {
-				if (err) return res.send({ error: true, message: 'Error de acceso' });
+				if (err) return resMgr.send(req, res, true, err, 'Error de acceso código:1');
 
 				inParams = [];
 				inParams.push(value); //ids
-				inParams.push(['name', 'bank_ids', 'child_ids']); //fields
+				inParams.push(['name', 'bank_ids', 'child_ids', 'ref']); //fields
 
 				odoo.execute_kw('res.partner', 'read', [inParams], function (err, value) {
-					if (err || !value || value.length == 0) { return res.send({ error: true, message: 'Error de acceso' }); }
+					if (err || !value || value.length == 0) return resMgr.send(req, res, true, err, 'Error de acceso código:2');
 					titular.id = value[0].id;
 					titular.name = value[0].name;
+					titular.ref = value[0].ref;
 
 					// Find banks
 					inParams = [];
@@ -140,7 +144,7 @@ app.post('/login', function (req, res) {
 					odoo.execute_kw('res.partner.bank', 'search', [inParams], function (err, value) {
 						if (err) {
 							dbapi.errorAccess(titular);
-							return res.send({ error: true, message: 'Error de acceso' });
+							return resMgr.send(req, res, true, err, 'Error de acceso código:3' );
 						}
 						var inParams = [];
 						inParams.push(value); //ids
@@ -149,7 +153,7 @@ app.post('/login', function (req, res) {
 						odoo.execute_kw('res.partner.bank', 'read', [inParams], function (err, value) {
 							if (err || !value || value.length == 0) {
 								dbapi.errorAccess(titular);
-								return res.send({ error: true, message: 'Error de acceso' });
+								return resMgr.send(req, res, true, titular, 'Error de acceso código:4' );
 							}
 
 							let found = false;
@@ -165,20 +169,20 @@ app.post('/login', function (req, res) {
 							}
 							if (!found) {
 								dbapi.errorAccess(titular);
-								return res.send({ error: true, data: err, message: 'Contraseña no válida' });
+								return resMgr.send(req, res, true, err, 'Contraseña no válida');
 							}
 
 							// Find childs
 							inParams = [];
 							inParams.push([['parent_id', '=', titular.id]]);
 							odoo.execute_kw('res.partner', 'search', [inParams], function (err, value) {
-								if (err) { return res.send({ error: true, message: 'Error de acceso' }); }
+								if (err) return resMgr.send(req, res, true, err, 'Error de acceso código:5' );
 								var inParams = [];
 								inParams.push(value); //ids
 								inParams.push(['name', 'active_school_id', 'company_id', 'x_ise_estado']); //fields
 
 								odoo.execute_kw('res.partner', 'read', [inParams], function (err, value) {
-									if (err) { return res.send({ error: true, message: 'Error de acceso' }); }
+									if (err) return resMgr.send(req, res, true, err, 'Error de acceso código:6' );
 
 									if (value && value.length > 0)
 										titular.childs = value;
@@ -186,7 +190,7 @@ app.post('/login', function (req, res) {
 									dbapi.okAccess(titular);
 
 									titular.token = secure.createToken(titular);
-									return res.send({ error: false, data: titular, message: 'success' });
+									return resMgr.send(req, res, false, titular, 'success');
 								});
 							});
 						});
@@ -199,17 +203,20 @@ app.post('/login', function (req, res) {
 
 app.post('/get_month', function (req, res) {
 
+	if (req.body.childId==null)
+		req.body.childId = req.body.student_id;
+
 	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.childId))
-		return res.send({ error: true, message: 'Error de autorización, token no válido' });
+		return resMgr.send(req, res, true, null, 'Error de autorización, token no válido');
 
 	odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));
 	odoo.connect(function (err) {
-		if (err) return res.send({ error: true, data: err, message: 'Error conexión con backend' });
-
+		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
+		
 		var inParams = [];
 		inParams.push([['student_id', '=', Number(req.body.childId)], ['year', '=', req.body.year], ['month', '=', req.body.month]]);
 		odoo.execute_kw('scat.student', 'search', [inParams], function (err, value) {
-			if (err || !value || value.length == 0) { return res.send({ error: true, message: 'No hay datos ' }); }
+			if (err || !value || value.length == 0) return resMgr.send(req, res, true, err, 'No hay datos');
 			var inParams = [];
 			let id = value[0];
 			inParams.push(value[0]); //ids
@@ -220,7 +227,7 @@ app.post('/get_month', function (req, res) {
 			inParams.push(fields); //fields
 
 			odoo.execute_kw('scat.student', 'read', [inParams], function (err, value) {
-				if (err || !value || value.length == 0) return res.send({ error: true, message: 'Error de acceso' });
+				if (err || !value || value.length == 0) return resMgr.send(req, res, true, err, 'Error de acceso código:7');
 				return res.send({ error: false, data: value, time: new Date(), id: id, message: 'success' });
 			});
 		});
@@ -230,7 +237,7 @@ app.post('/get_month', function (req, res) {
 app.post('/get_preaviso', function (req, res) {
 
 	odoo.connect(function (err) {
-		if (err) return res.send({ error: true, data: err, message: 'Error conexión con backend' });
+		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
 		var inParams = [];
 		inParams.push([['school_ids', '=', Number(req.body.school_id)], ['end_date', '=', false]]);
@@ -242,7 +249,7 @@ app.post('/get_preaviso', function (req, res) {
 			inParams.push(['preaviso', 'school_id', 'n_expediente', 'end_date']); //fields
 
 			odoo.execute_kw('scat.expediente', 'read', [inParams], function (err, value) {
-				if (err || !value || value.length == 0) return res.send({ error: true, message: 'Error de acceso' });
+				if (err || !value || value.length == 0) return res.send({ error: true, message: 'Error de acceso código:8' });
 				return res.send({ error: false, data: value, message: 'success' });
 			});
 		});
@@ -251,12 +258,15 @@ app.post('/get_preaviso', function (req, res) {
 
 app.post('/get_asistencia', function (req, res) {
 
+	if (req.body.childId==null)
+		req.body.childId = req.body.child_id;
+
 	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.childId))
-		return res.send({ error: true, message: 'Error de autorización, token no válido' });
+		return resMgr.send(req, res, true, null, 'Error de autorización, token no válido');
 
 	odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));		
 	odoo.connect(function (err) {
-		if (err) return res.send({ error: true, data: err, message: 'Error conexión con backend' });
+		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
 		var inParams = [];
 		inParams.push([['id', '=', Number(req.body.childId)]]);
@@ -268,7 +278,7 @@ app.post('/get_asistencia', function (req, res) {
 			inParams.push(['y_ise_factura_aut', 'y_ise_s', 'y_ise_l', 'y_ise_m', 'y_ise_x', 'y_ise_j', 'y_ise_v']); //fields
 
 			odoo.execute_kw('res.partner', 'read', [inParams], function (err, value) {
-				if (err || !value || value.length == 0) return res.send({ error: true, message: 'Error de acceso' });
+				if (err || !value || value.length == 0) return res.send({ error: true, message: 'Error de acceso código:9' });
 				return res.send({ error: false, data: value, message: 'success' });
 			});
 		});
@@ -277,12 +287,13 @@ app.post('/get_asistencia', function (req, res) {
 
 app.post('/set_asistencia', function (req, res) {
 
+
 	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.childId))
-		return res.send({ error: true, message: 'Error de autorización, token no válido' });
+		return resMgr.send(req, res, true, null, 'Error de autorización, token no válido');
 
 	odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));
 	odoo.connect(function (err) {
-		if (err) return res.send({ error: true, data: err, message: 'Error conexión con backend' });
+		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
 		var inParams = [];
 		inParams.push([Number(req.body.childId)]); //id to update
@@ -298,11 +309,11 @@ app.post('/set_asistencia', function (req, res) {
 		inParams.push(jsonData);
 
 		odoo.execute_kw('res.partner', 'write', [inParams], function (err, value) {
-			if (err) { return res.send({ error: true, data: err, message: 'Error escritura en backend, contacte con soporte' }); }
+			if (err) return resMgr.send(req, res, true, err, 'Error escritura en backend, contacte con soporte');
 
 			dbapi.setHistorial(req.body.userId, req.body.parentId, req.body.childId, null, JSON.stringify(jsonData), req.body.titular, 1);
 
-			return res.send({ error: false, data: value, message: 'success' });
+			return resMgr.send(req, res, false, value, 'success' );
 		});
 	});
 });
@@ -311,11 +322,11 @@ app.post('/set_asistencia', function (req, res) {
 app.post('/set_day', function (req, res) {
 
 	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.childId))
-		return res.send({ error: true, message: 'Error de autorización, token no válido' });
+		return resMgr.send(req, res, true, null, 'Error de autorización, token no válido');
 
 	odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));		
 	odoo.connect(function (err) {
-		if (err) return res.send({ error: true, data: err, message: 'Error conexión con backend' });
+		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
 		var inParams = [];
 		inParams.push([Number(req.body.id)]); //id to update
@@ -324,12 +335,12 @@ app.post('/set_day', function (req, res) {
 		inParams.push(aux);
 
 		odoo.execute_kw('scat.student', 'write', [inParams], function (err, value) {
-			if (err) { return res.send({ error: true, data: err, message: 'Error escritura en backend, contacte con soporte' }); }
+			if (err) return resMgr.send(req, res, true, err, 'Error escritura en backend, contacte con soporte');
 			let jsonData = {
 				value: req.body.value
 			};
 			dbapi.setHistorial(req.body.userId, req.body.parentId, req.body.childId, req.body.date, JSON.stringify(jsonData), req.body.titular, 0);
-			return res.send({ error: false, data: value, message: 'success' });
+			return resMgr.send(req, res, false, value, 'success' );
 		});
 
 	});
@@ -338,10 +349,10 @@ app.post('/set_day', function (req, res) {
 app.post('/set_bank', function (req, res) {
 
 	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.parentId))
-		return res.send({ error: true, message: 'Error de autorización, token no válido' });
+		return resMgr.send(req, res, true, null, 'Error de autorización, token no válido');
 
 	odoo.connect(function (err) {
-		if (err) return res.send({ error: true, data: err, message: 'Error conexión con backend' });
+		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
 		var inParams = [];
 		//inParams.push([Number(req.body.id)]); //id to update
@@ -448,7 +459,7 @@ app.post('/control-get-school', function (req, res) {
   });
     
 	control_odoo.connect(function (err) {
-		if (err) return res.send({ error: true, data: err, message: 'Error conexión con backend' });
+		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
 		var inParams = [];
     inParams.push([['school_id', '=', Number(req.body.school_id)], ['year', '=', req.body.year], ['month', '=', req.body.month]]);
@@ -472,7 +483,7 @@ app.post('/control-set-day', function (req, res) {
   });
 
 	control_odoo.connect(function (err) {
-		if (err) return res.send({ error: true, data: err, message: 'Error conexión con backend' });
+		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
 		var inParams = [];
 		inParams.push([Number(req.body.id)]); //id to update
