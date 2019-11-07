@@ -30,7 +30,6 @@ const DbApi = require('./lib/db-api');
 const Secure = require('./lib/secure');
 
 const secure = new Secure(process.env['TOKEN_SECRET']);
-var odoo = new Odoo(secure.odooConfigCatering(0));
 
 const ResponseMgr = require('./lib/response-mgr');
 const resMgr = new ResponseMgr();
@@ -120,6 +119,7 @@ app.post('/login', function (req, res) {
 			}
 		}
 
+		var odoo = new Odoo(secure.odooConfigCatering(0));
 		odoo.connect(function (err) {
 			if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
@@ -209,7 +209,7 @@ app.post('/get_month', function (req, res) {
 	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.childId))
 		return resMgr.send(req, res, true, null, 'Error de autorización, token no válido');
 
-	odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));
+	var odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));
 	odoo.connect(function (err) {
 		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 		
@@ -236,6 +236,7 @@ app.post('/get_month', function (req, res) {
 
 app.post('/get_preaviso', function (req, res) {
 
+	var odoo = new Odoo(secure.odooConfigCatering(0));
 	odoo.connect(function (err) {
 		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
@@ -264,7 +265,7 @@ app.post('/get_asistencia', function (req, res) {
 	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.childId))
 		return resMgr.send(req, res, true, null, 'Error de autorización, token no válido');
 
-	odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));		
+	var odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));		
 	odoo.connect(function (err) {
 		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
@@ -291,7 +292,7 @@ app.post('/set_asistencia', function (req, res) {
 	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.childId))
 		return resMgr.send(req, res, true, null, 'Error de autorización, token no válido');
 
-	odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));
+	var odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));
 	odoo.connect(function (err) {
 		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
@@ -324,7 +325,7 @@ app.post('/set_day', function (req, res) {
 	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.childId))
 		return resMgr.send(req, res, true, null, 'Error de autorización, token no válido');
 
-	odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));		
+	var odoo = new Odoo(secure.odooConfigCatering(req.body.companyId));		
 	odoo.connect(function (err) {
 		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
@@ -351,6 +352,7 @@ app.post('/set_bank', function (req, res) {
 	if (process.env['TOKEN_ENABLED'] && !secure.ensureAuthenticated(req, res, req.body.parentId))
 		return resMgr.send(req, res, true, null, 'Error de autorización, token no válido');
 
+	var odoo = new Odoo(secure.odooConfigCatering(0));		
 	odoo.connect(function (err) {
 		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
@@ -371,6 +373,7 @@ app.post('/set_bank', function (req, res) {
 
 // Add a new user  
 app.post('/get_fields', function (req, res) {
+	var odoo = new Odoo(secure.odooConfigCatering(0));	
 	odoo.connect(function (err) {
 		if (err) { return console.log(err); }
 		console.log('Connected to Odoo server.');
