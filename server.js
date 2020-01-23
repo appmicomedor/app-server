@@ -10,6 +10,11 @@ if (process.argv.indexOf('-dev') >= 0)
 else
 	require('dotenv').config();
 
+const multer = require('multer');
+const parser = require('xml2json');
+const mysql = require('mysql');
+const _ = require('lodash');
+
 console.log('Environment ' + process.env['NODE_ENV']);
 
 const app = express();
@@ -436,7 +441,7 @@ app.post('/control-login', function (req, res) {
 
       inParams = [];
       inParams.push(value); //ids
-      inParams.push(['id','code','name']); //fields
+      inParams.push(['id','code','name', 'company_id']); //fields
 
       control_odoo.execute_kw('scat.school', 'read', [inParams], function (err, value) {
         if (err || !value || value.length == 0) { return res.send({ error: true, message: 'No hay escuelas para este usuario '}); }
@@ -498,6 +503,201 @@ app.post('/control-set-day', function (req, res) {
 			if (err) { return res.send({ error: true, data: err, message: 'Error escritura en backend, contacte con soporte' }); }
 			return res.send({ error: false, data: value, message: 'success' });
 		});
+	});
+});
+
+const storage = multer.diskStorage({
+    destination: function(req, file, cb) {
+        cb(null, './uploads');
+    }, 
+    filename: function(req, file, cb) {
+        cb(null, file.originalname);
+    }
+});
+
+
+var upload = multer({ 
+	storage: storage,
+	fileFilter: function(req, file, cb) {
+		console.log(req);
+		if(req.body.password !== 'ODOO_PWD') {
+			return cb(null, false);
+		}
+
+		if(file.mimetype !== 'application/xml') {
+			return cb(null, false);
+		}
+		cb(null, true);
+	} 
+});
+// file_upload
+app.post('/save_albaran-old', upload.single('file_upload'), function (req, res) {
+	if(!req.file) {
+		res.send({message: 'Please upload an XML file or provide the correct password'});
+	} else {
+
+		var jsonfile;
+		var newJson;
+		var uploadedFilePath = './uploads/'+req.file.originalname; 
+
+		fs.readFile(uploadedFilePath, 'utf8', function(err,data){
+
+			if(err) {
+				return res.send({message:err});
+			} else {
+
+				jsonfile = JSON.parse(parser.toJson(data,{reversible: true}));
+				newJson = {jsonData:jsonfile.VFPData.etiq_xml};
+
+				var infoCompanyId = jsonfile.VFPData.etiq_xml[0].empresa.$t;
+				var infoDate = new Date(jsonfile.VFPData.etiq_xml[0].fechaconsumo.$t);
+
+				var queryData = {date: infoDate, companyId: infoCompanyId, data: JSON.stringify(newJson)};
+				var sqlQuery = "INSERT INTO albaranes SET ?";
+				dbapi.connection.query(sqlQuery, queryData, function(err, rows) {
+					
+					if(err) {
+						return res.send({message: err});
+					} else {
+						fs.unlink(uploadedFilePath, (err) => {
+							if(err) {
+								console.log(err);
+							}
+						});
+						return res.send({message: rows});
+					}
+
+				});
+			}
+
+		});
+
+	}
+
+});
+
+app.post('/save_albaran', (req, res) => {
+
+	if(req.body.password === 'ODOO_PWD') {
+
+		var baseUrl = req.body.readerFile;
+		var splittedArr = baseUrl.split(';base64,');
+		let text = new Buffer(splittedArr[1], 'base64').toString('ascii');
+		jsonfile = JSON.parse(parser.toJson(text,{reversible: true}));
+	
+		newJson = {jsonData:jsonfile.VFPData.etiq_xml};
+	
+		var infoCompanyId = jsonfile.VFPData.etiq_xml[0].empresa.$t;
+		var infoDate = new Date(jsonfile.VFPData.etiq_xml[0].fechaconsumo.$t);
+	
+		var queryData = {date: infoDate, companyId: infoCompanyId, data: JSON.stringify(newJson)};
+		var sqlQuery = "INSERT INTO albaranes SET ?";
+		dbapi.connection.query(sqlQuery, queryData, function(err, rows) {
+			
+			if(err) {
+				return res.send({message: err});
+			} else {
+				return res.send({message: rows});
+			}
+	
+		});
+
+
+	} else {
+		res.send({message:'Password is incorrect'});
+	}
+
+
+
+});
+
+app.get('/get_albaran', function(req, res) {
+
+	console.log(req.query.code);
+	var queryDate = req.query.date;
+	var queryCode = req.query.code;
+
+	var sqlQueryGetAlbaran = "SELECT CONVERT (data USING utf8) AS result FROM albaranes WHERE date = " + mysql.escape(queryDate);
+	// var sqlQueryGetAlbaran = "SELECT CONVERT (data USING utf8) AS result FROM albaranes";
+
+	dbapi.connection.query(sqlQueryGetAlbaran, function(err, rows) {
+		var newData=[];
+		var theNumber = queryCode;
+		var filteredArray = [];
+		if(err) {
+			res.send({message: err});
+		} else {
+			rows.forEach(element => {
+				newData.push(JSON.parse(element.result).jsonData);
+			});
+
+			newData.forEach( element => {
+				
+				// filteredArray = _.filter(element, function(item){
+				// 	return item.nombrecentro['$t'] === theNumber;
+				// });
+				console.log(element.length);
+				element.forEach( elem => {
+					if(elem.nombrecentro['$t'] === theNumber) {
+						filteredArray.push(elem);
+					}
+				})
+			});
+
+			res.send({message: filteredArray});
+		}
+	});
+
+});
+
+app.post('/save-group', (req, res) => {
+
+	var saveGroupSqlData = {schoolId:req.body.currentSchoolId, createdAt:new Date(req.body.createdAt), userName: req.body.userName, groupId:req.body.groupId};
+	var saveGroupSqlQuery = "INSERT INTO Grupo SET ?"
+
+	dbapi.connection.query(saveGroupSqlQuery, saveGroupSqlData, (err, rows) => {
+		if(err){
+			return res.send({message:err});
+		} else {
+			return res.send({message:rows});
+		}
+	});
+
+});
+
+app.get('/get-all-groups', (req, res) => {
+
+	var getAllGroupsSqlQuery = "SELECT * FROM Grupo";
+
+	dbapi.connection.query(getAllGroupsSqlQuery, (err, rows) => {
+		if(err){
+			return res.send({message:err});
+		} else {
+			return res.send({message:rows});
+		}
+	});
+});
+
+app.get('/get-all-group-students', (req, res) => {
+
+	var getAllGroupStudentsSqlQuery = "SELECT * FROM EstudianteGrupo";
+
+	dbapi.connection.query(getAllGroupStudentsSqlQuery, (err, rows) => {
+		if(err){
+			return res.send({message:err});
+		} else {
+			return res.send({message:rows});
+		}
+	});
+});
+
+app.post('/save-EstudianteGrupo-data', (req, res) => {
+
+	var saveEstudianteGrupoData = {userName:req.body.userName ,groupId:req.body.groupId ,studentId:req.body.studentId , createdAt: new Date(req.body.createdAt)}
+	var saveEstudianteGrupoSqlQuery = "INSERT INTO EstudianteGrupo SET ?";
+
+	dbapi.connection.query(saveEstudianteGrupoSqlQuery, saveEstudianteGrupoData, (err, rows) => {
+		return res.send({message: rows});
 	});
 });
 
