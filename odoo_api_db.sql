@@ -10,9 +10,10 @@ CREATE TABLE `albaranes` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `date` date DEFAULT NULL,
   `companyId` varchar(45) DEFAULT NULL,
-  `data` blob,
+  `data` LONGBLOB,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=36 DEFAULT CHARSET=utf8;
+ALTER TABLE `albaranes` ADD UNIQUE( `date`, `companyId`);
 
 ALTER TABLE `usuarios`
   ADD PRIMARY KEY (`id`),

@@ -28,6 +28,8 @@ const allowedOrigins = [
 	'https://appcontrolpresencia.micomedor.net',
 ];
 const bodyParser = require('body-parser');
+app.use(bodyParser.json({limit: '50mb'}));
+app.use(bodyParser.urlencoded({limit: '50mb', extended: true}));
 
 const Odoo = require('odoo-xmlrpc');
 
@@ -50,10 +52,9 @@ const corsOptions = {
 }
 
 app.options('*', cors(corsOptions));
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({
-	extended: true
-}));
+app.use(bodyParser.json({limit: '10mb', extended: true}))
+app.use(bodyParser.urlencoded({limit: '10mb', extended: true}))
+
 app.use(helmet());
 app.use(function (req, res, next) {
 
@@ -449,7 +450,27 @@ app.post('/control-login', function (req, res) {
         if (value && value.length > 0)
           profesional.schools = value;
 
-        return res.send({ error: false, data: profesional, message: 'success' });
+				inParams = [];
+				inParams.push([['id', '>', 0]])
+				control_odoo.execute_kw('res.groups', 'search', [inParams], function (err, value) {
+					if (err) res.send({ error: true, message: 'Error recuperando datos ' + JSON.stringify(err) });
+
+					for (let i = 0; i < value.length; i++) {
+						inParams = [];
+						inParams.push(value[i]); //ids
+						inParams.push(['id','name','users']); //fields
+			
+						control_odoo.execute_kw('res.groups', 'read', [inParams], function (err, value) {
+							if (err || !value || value.length == 0) { return res.send({ error: true, message: 'No hay escuelas para este usuario '}); }
+							console.log('value = ' + JSON.stringify(value))
+						});
+					}
+
+					return res.send({ error: false, data: profesional, message: 'success' });
+
+				});
+
+        //return res.send({ error: false, data: profesional, message: 'success' });
       });
     });
 	});
@@ -530,55 +551,19 @@ var upload = multer({
 		cb(null, true);
 	} 
 });
-// file_upload
-app.post('/save_albaran-old', upload.single('file_upload'), function (req, res) {
-	if(!req.file) {
-		res.send({message: 'Please upload an XML file or provide the correct password'});
-	} else {
-
-		var jsonfile;
-		var newJson;
-		var uploadedFilePath = './uploads/'+req.file.originalname; 
-
-		fs.readFile(uploadedFilePath, 'utf8', function(err,data){
-
-			if(err) {
-				return res.send({message:err});
-			} else {
-
-				jsonfile = JSON.parse(parser.toJson(data,{reversible: true}));
-				newJson = {jsonData:jsonfile.VFPData.etiq_xml};
-
-				var infoCompanyId = jsonfile.VFPData.etiq_xml[0].empresa.$t;
-				var infoDate = new Date(jsonfile.VFPData.etiq_xml[0].fechaconsumo.$t);
-
-				var queryData = {date: infoDate, companyId: infoCompanyId, data: JSON.stringify(newJson)};
-				var sqlQuery = "INSERT INTO albaranes SET ?";
-				dbapi.connection.query(sqlQuery, queryData, function(err, rows) {
-					
-					if(err) {
-						return res.send({message: err});
-					} else {
-						fs.unlink(uploadedFilePath, (err) => {
-							if(err) {
-								console.log(err);
-							}
-						});
-						return res.send({message: rows});
-					}
-
-				});
-			}
-
-		});
-
-	}
-
-});
 
 app.post('/save_albaran', (req, res) => {
 
-	if(req.body.password === 'ODOO_PWD') {
+	let control_odoo = new Odoo({
+		url: process.env['ODOO_URL'],
+		port: process.env['ODOO_PORT'],
+    db: process.env['ODOO_DB'],   
+		username: req.body.username,
+		password: req.body.password,
+  });
+
+	control_odoo.connect(function (err) {
+		if (err) return resMgr.send(req, res, true, err, 'Error conexión con backend');
 
 		var baseUrl = req.body.readerFile;
 		var splittedArr = baseUrl.split(';base64,');
@@ -595,30 +580,23 @@ app.post('/save_albaran', (req, res) => {
 		dbapi.connection.query(sqlQuery, queryData, function(err, rows) {
 			
 			if(err) {
-				return res.send({message: err});
+				return resMgr.send(null, res, err, null, 'Error guardar albaran');
 			} else {
 				return res.send({message: rows});
 			}
 	
 		});
-
-
-	} else {
-		res.send({message:'Password is incorrect'});
-	}
-
-
-
+	});
 });
 
 app.get('/get_albaran', function(req, res) {
 
-	console.log(req.query.code);
 	var queryDate = req.query.date;
 	var queryCode = req.query.code;
 
 	var sqlQueryGetAlbaran = "SELECT CONVERT (data USING utf8) AS result FROM albaranes WHERE date = " + mysql.escape(queryDate);
 	// var sqlQueryGetAlbaran = "SELECT CONVERT (data USING utf8) AS result FROM albaranes";
+	//console.log(sqlQueryGetAlbaran);
 
 	dbapi.connection.query(sqlQueryGetAlbaran, function(err, rows) {
 		var newData=[];
@@ -637,8 +615,8 @@ app.get('/get_albaran', function(req, res) {
 				// 	return item.nombrecentro['$t'] === theNumber;
 				// });
 				console.log(element.length);
-				element.forEach( elem => {
-					if(elem.nombrecentro['$t'] === theNumber) {
+				element.forEach( elem => {			
+					if(elem.codise['$t'] === theNumber) {
 						filteredArray.push(elem);
 					}
 				})
@@ -647,7 +625,6 @@ app.get('/get_albaran', function(req, res) {
 			res.send({message: filteredArray});
 		}
 	});
-
 });
 
 app.post('/save-group', (req, res) => {
@@ -691,14 +668,81 @@ app.get('/get-all-group-students', (req, res) => {
 	});
 });
 
+app.get('/get-distinct-groupId', (req, res) => {
+
+	var getDistinctGroupIdSqlQuery = "SELECT distinct groupId FROM EstudianteGrupo";
+
+	dbapi.connection.query(getDistinctGroupIdSqlQuery, (err, rows) => {
+		if(err){
+			return res.send({message:err});
+		} else {
+			return res.send({message:rows});
+		}
+	});
+});
+
+
 app.post('/save-EstudianteGrupo-data', (req, res) => {
 
-	var saveEstudianteGrupoData = {userName:req.body.userName ,groupId:req.body.groupId ,studentId:req.body.studentId , createdAt: new Date(req.body.createdAt)}
-	var saveEstudianteGrupoSqlQuery = "INSERT INTO EstudianteGrupo SET ?";
+	// console.log(req.body);
 
-	dbapi.connection.query(saveEstudianteGrupoSqlQuery, saveEstudianteGrupoData, (err, rows) => {
+	// return res.send(req.body);
+
+	var groupId = req.body.groupId;
+	var userName = req.body.userName;
+	var createdAt = new Date(req.body.createdAt);
+	var stToAdd = req.body.studentIdToAdd;
+	var stToRemove = req.body.studentIdToRemove;
+
+	console.log(groupId);
+	console.log(userName);
+	console.log(createdAt);
+	console.log(createdAt);
+	console.log(stToRemove);
+	console.log(stToAdd);
+
+	var addArrMain = [];
+
+	if(stToRemove.length === 0){
+		console.log('sttoremove = 0');
+	} else {
+		console.log('sttoremove is not 0');
+	}
+
+	if(stToAdd.length === 0){
+		console.log('sttoadd = 0');
+	} else {
+		console.log('sttoadd is not 0');
+		stToAdd.forEach( elem => {
+			let addArr = [];
+			addArr.push(userName);
+			addArr.push(groupId);
+			addArr.push(elem);
+			addArr.push(createdAt);
+			addArrMain.push(addArr);
+
+		});
+		console.log(addArrMain);
+
+	}
+
+	var sqlAdd = "INSERT INTO EstudianteGrupo (userName, groupId, studentId, createdAt) VALUES ?";
+	var values = addArrMain;
+	dbapi.connection.query(sqlAdd, [values], (err, rows) => {
+		if(err) {
+			return res.send({message: err});
+		}
 		return res.send({message: rows});
 	});
+
+	// var saveEstudianteGrupoData = {userName:req.body.userName ,groupId:req.body.groupId ,studentId:req.body.studentId , createdAt: new Date(req.body.createdAt)}
+	// var saveEstudianteGrupoSqlQuery = "INSERT INTO EstudianteGrupo SET ?";
+
+	// dbapi.connection.query(saveEstudianteGrupoSqlQuery, saveEstudianteGrupoData, (err, rows) => {
+	// 	return res.send({message: rows});
+	// });
+
+
 });
 
 if (process.env['NODE_ENV'] != 'development') {
