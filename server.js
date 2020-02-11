@@ -419,9 +419,12 @@ app.post('/control-login', function (req, res) {
 		db_id: null,
 		username: req.body.username,
 		password: req.body.password,
+		uid: null,
 		schools: [],
 		contador_fallos: 0,
-		ultimo_acceso: null
+		ultimo_acceso: null,
+		settings: [],
+		roles: [],
 	};
 
 	let control_odoo = new Odoo({
@@ -432,8 +435,11 @@ app.post('/control-login', function (req, res) {
 		password: req.body.password,
 	});
 
-	control_odoo.connect(function (err) {
+	control_odoo.connect(function (err, uid) {
     if (err) return res.send({ error: true, data: err, message: 'Error usuario / contraseña no válidos' });
+
+		profesional.settings = dbapi.getSettings();
+		profesional.uid = uid;
 
     var inParams = [];
     inParams.push([['id', '>', 0]])
@@ -443,34 +449,13 @@ app.post('/control-login', function (req, res) {
       inParams = [];
       inParams.push(value); //ids
       inParams.push(['id','code','name', 'company_id']); //fields
-
       control_odoo.execute_kw('scat.school', 'read', [inParams], function (err, value) {
         if (err || !value || value.length == 0) { return res.send({ error: true, message: 'No hay escuelas para este usuario '}); }
 
         if (value && value.length > 0)
           profesional.schools = value;
-
-				inParams = [];
-				inParams.push([['id', '>', 0]])
-				control_odoo.execute_kw('res.groups', 'search', [inParams], function (err, value) {
-					if (err) res.send({ error: true, message: 'Error recuperando datos ' + JSON.stringify(err) });
-
-					for (let i = 0; i < value.length; i++) {
-						inParams = [];
-						inParams.push(value[i]); //ids
-						inParams.push(['id','name','users']); //fields
 			
-						control_odoo.execute_kw('res.groups', 'read', [inParams], function (err, value) {
-							if (err || !value || value.length == 0) { return res.send({ error: true, message: 'No hay escuelas para este usuario '}); }
-							console.log('value = ' + JSON.stringify(value))
-						});
-					}
-
-					return res.send({ error: false, data: profesional, message: 'success' });
-
-				});
-
-        //return res.send({ error: false, data: profesional, message: 'success' });
+				return res.send({ error: false, data: profesional, message: 'success' });		
       });
     });
 	});
@@ -573,9 +558,13 @@ app.post('/save_albaran', (req, res) => {
 		newJson = {jsonData:jsonfile.VFPData.etiq_xml};
 	
 		var infoCompanyId = jsonfile.VFPData.etiq_xml[0].empresa.$t;
+		var infoFechaelaboracion = new Date(jsonfile.VFPData.etiq_xml[0].fechaelaboracion.$t);
+		var infoFechaconsumo = new Date(jsonfile.VFPData.etiq_xml[0].fechaconsumo.$t);
+		console.log(infoFechaconsumo);
+		console.log(req.body.fileName);												
 		var infoDate = new Date(jsonfile.VFPData.etiq_xml[0].fechaconsumo.$t);
 	
-		var queryData = {date: infoDate, companyId: infoCompanyId, data: JSON.stringify(newJson)};
+		var queryData = {date: infoDate, companyId: infoCompanyId, data: JSON.stringify(newJson), fechaelaboracion: infoFechaelaboracion, fileName: req.body.fileName, fechaconsumo: infoFechaconsumo};
 		var sqlQuery = "INSERT INTO albaranes SET ?";
 		dbapi.connection.query(sqlQuery, queryData, function(err, rows) {
 			
@@ -627,6 +616,20 @@ app.get('/get_albaran', function(req, res) {
 	});
 });
 
+app.get('/get-all-albaranes-list', (req, res) => {
+
+	var getAllAlbaranesListSqlQuery = "SELECT * FROM albaranes";
+
+	dbapi.connection.query(getAllAlbaranesListSqlQuery, (err, rows) => {
+		if(err){
+			return res.send({message:err});
+		} else {
+			return res.send({message:rows});
+		}
+	});
+});
+
+
 app.post('/save-group', (req, res) => {
 
 	var saveGroupSqlData = {schoolId:req.body.currentSchoolId, createdAt:new Date(req.body.createdAt), userName: req.body.userName, groupId:req.body.groupId};
@@ -655,12 +658,56 @@ app.get('/get-all-groups', (req, res) => {
 	});
 });
 
+app.get('/get-albaranes-for-id', (req, res) => {
+
+	var gid = req.query.id;
+	// var f = "SELECT * FROM albaranes WHERE id =" + mysql.escape(gid);
+	var getAlbaranesForIDSqlQuery = "SELECT CONVERT (data USING utf8) AS result FROM albaranes WHERE id = " + mysql.escape(gid);
+
+	dbapi.connection.query(getAlbaranesForIDSqlQuery, function(err, rows) {
+		var newData=[];
+		// var theNumber = queryCode;
+		// var filteredArray = [];
+		if(err) {
+			res.send({message: err});
+		} else {
+			rows.forEach(element => {
+				newData.push(JSON.parse(element.result).jsonData);
+			});
+
+			// newData.forEach( element => {
+			// 	console.log(element.length);
+			// 	element.forEach( elem => {			
+			// 		if(elem.codise['$t'] === theNumber) {
+			// 			filteredArray.push(elem);
+			// 		}
+			// 	})
+			// });
+
+			res.send({message: newData});
+		}
+	});
+
+});
+
+app.get('/get_albaran', function(req, res) {
+
+	var queryDate = req.query.date;
+	var queryCode = req.query.code;
+
+	// var sqlQueryGetAlbaran = "SELECT CONVERT (data USING utf8) AS result FROM albaranes";
+	//console.log(sqlQueryGetAlbaran);
+
+	
+});
+
 app.get('/get-all-group-students', (req, res) => {
 
 	var getAllGroupStudentsSqlQuery = "SELECT * FROM EstudianteGrupo";
 
 	dbapi.connection.query(getAllGroupStudentsSqlQuery, (err, rows) => {
 		if(err){
+			console.log(err);
 			return res.send({message:err});
 		} else {
 			return res.send({message:rows});
@@ -670,7 +717,8 @@ app.get('/get-all-group-students', (req, res) => {
 
 app.get('/get-distinct-groupId', (req, res) => {
 
-	var getDistinctGroupIdSqlQuery = "SELECT distinct groupId FROM EstudianteGrupo";
+	// var getDistinctGroupIdSqlQuery = "SELECT distinct groupId FROM EstudianteGrupo";
+	var getDistinctGroupIdSqlQuery = "SELECT groupId FROM Grupo";
 
 	dbapi.connection.query(getDistinctGroupIdSqlQuery, (err, rows) => {
 		if(err){
@@ -681,12 +729,23 @@ app.get('/get-distinct-groupId', (req, res) => {
 	});
 });
 
+app.get('/get-studentIds-for-groupId', (req, res) => {
+
+	var gid = req.query.gid;
+	// var getDistinctGroupIdSqlQuery = "SELECT distinct groupId FROM EstudianteGrupo";
+	var getstudentIdSqlQuery = "SELECT studentId FROM EstudianteGrupo WHERE groupId =" + mysql.escape(gid);
+
+	dbapi.connection.query(getstudentIdSqlQuery, (err, rows) => {
+		if(err){
+			return res.send({message:err});
+		} else {
+			console.log(rows);
+			return res.send({message:rows});
+		}
+	});
+});
 
 app.post('/save-EstudianteGrupo-data', (req, res) => {
-
-	// console.log(req.body);
-
-	// return res.send(req.body);
 
 	var groupId = req.body.groupId;
 	var userName = req.body.userName;
@@ -694,25 +753,27 @@ app.post('/save-EstudianteGrupo-data', (req, res) => {
 	var stToAdd = req.body.studentIdToAdd;
 	var stToRemove = req.body.studentIdToRemove;
 
-	console.log(groupId);
-	console.log(userName);
-	console.log(createdAt);
-	console.log(createdAt);
-	console.log(stToRemove);
-	console.log(stToAdd);
-
 	var addArrMain = [];
+	var studentAddedRows, studentRemovedRows;
 
 	if(stToRemove.length === 0){
-		console.log('sttoremove = 0');
+		console.log('No student removed');
+		studentAddedRows = 'No student removed';
 	} else {
-		console.log('sttoremove is not 0');
+		var sqlRemove = "DELETE FROM EstudianteGrupo WHERE studentId IN (?)"
+		var valuesToRemove = req.body.studentIdToRemove;
+		dbapi.connection.query(sqlRemove, [valuesToRemove], (err, rows) => {
+			if(err){
+				console.log(err);
+			} else {
+				studentAddedRows = rows;
+			}
+		});
 	}
 
 	if(stToAdd.length === 0){
-		console.log('sttoadd = 0');
+		studentRemovedRows = 'No student added';
 	} else {
-		console.log('sttoadd is not 0');
 		stToAdd.forEach( elem => {
 			let addArr = [];
 			addArr.push(userName);
@@ -720,20 +781,20 @@ app.post('/save-EstudianteGrupo-data', (req, res) => {
 			addArr.push(elem);
 			addArr.push(createdAt);
 			addArrMain.push(addArr);
-
 		});
-		console.log(addArrMain);
 
+		var sqlAdd = "INSERT INTO EstudianteGrupo (userName, groupId, studentId, createdAt) VALUES ?";
+		var values = addArrMain;
+		dbapi.connection.query(sqlAdd, [values], (err, rows) => {
+			if(err) {
+				console.log(err);
+			} else {
+				studentRemovedRows = rows;
+			}
+		});
 	}
 
-	var sqlAdd = "INSERT INTO EstudianteGrupo (userName, groupId, studentId, createdAt) VALUES ?";
-	var values = addArrMain;
-	dbapi.connection.query(sqlAdd, [values], (err, rows) => {
-		if(err) {
-			return res.send({message: err});
-		}
-		return res.send({message: rows});
-	});
+	res.send({message:{studentAdded:studentAddedRows, studentRemoved: studentRemovedRows}});
 
 	// var saveEstudianteGrupoData = {userName:req.body.userName ,groupId:req.body.groupId ,studentId:req.body.studentId , createdAt: new Date(req.body.createdAt)}
 	// var saveEstudianteGrupoSqlQuery = "INSERT INTO EstudianteGrupo SET ?";
@@ -742,7 +803,51 @@ app.post('/save-EstudianteGrupo-data', (req, res) => {
 	// 	return res.send({message: rows});
 	// });
 
+});
 
+app.post('/delete-group-and-students-in-it', (req, res) => {
+	let groupId = req.body.groupId;
+
+	let sqlGroupDelete = "DELETE FROM Grupo WHERE groupId = ?"
+	dbapi.connection.query(sqlGroupDelete, [groupId], (err, rows) => {
+		if(err){
+			console.log(err);
+		} else {
+			console.log(rows);
+			let sqlStudentInGroupDelete = "DELETE FROM EstudianteGrupo WHERE groupId = ?";
+			dbapi.connection.query(sqlStudentInGroupDelete, [groupId], (err, rows) => {
+				if(err) {
+					console.log(err);
+				} else {
+					return res.send({message: rows});
+				}
+			});
+		}
+	})
+});
+
+app.get('/check-user-role', (req, res) => {
+	console.log(req.query.username);
+
+	sqlGetRoleId = "SELECT roleId FROM userRoles WHERE username =" + mysql.escape(req.query.username);
+	dbapi.connection.query(sqlGetRoleId, (err, rows) => {
+		if(err){
+			res.send({"message":err});
+		} else {
+			// res.send({"message":rows});
+			console.log(rows[0].roleId);
+
+			sqlGetAccessForRoleId = "SELECT access FROM roles WHERE id =" + mysql.escape(rows[0].roleId);
+			dbapi.connection.query(sqlGetAccessForRoleId, (err, row) => {
+				if(err){
+					res.send({"message":err});
+				} else {
+					res.send({"message":row});
+				}
+			});
+
+		}
+	});
 });
 
 if (process.env['NODE_ENV'] != 'development') {
