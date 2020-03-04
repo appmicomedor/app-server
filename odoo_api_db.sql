@@ -104,3 +104,21 @@ ALTER TABLE `Settings`
 
 INSERT INTO Settings (id, name, value)
 VALUES (1, 'control_days_prev', '80');
+
+create table  docs_cat (
+  id int auto_increment not null primary key,
+  title varchar(32)
+);
+
+create table docs (
+  id int auto_increment not null primary key,
+  cat_id int not null,
+  descripcion varchar(250) not null,
+  url varchar(3000) not null,
+  foreign key (cat_id) references docs_cat(id)
+);
+
+ALTER TABLE `docs` 
+CHANGE `descripcion` `descripcion` VARCHAR(250) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL, 
+CHANGE `url` `url` VARCHAR(3000) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL;
+
