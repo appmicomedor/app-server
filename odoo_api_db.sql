@@ -125,3 +125,6 @@ ALTER TABLE `docs`
 CHANGE `descripcion` `descripcion` VARCHAR(250) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL, 
 CHANGE `url` `url` VARCHAR(3000) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL;
 
+ALTER TABLE `Grupo` CHANGE `groupId` `groupName` varchar(255);
+ALTER TABLE `EstudianteGrupo` CHANGE `groupId` `groupId` int(11);
+ALTER TABLE `EstudianteGrupo` CHANGE `school` `schoolId` varchar(255);

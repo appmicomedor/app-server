@@ -663,69 +663,44 @@ app.get('/get-albaranes-for-id', (req, res) => {
 
 app.post('/save-group', (req, res) => {
 
-	var saveGroupSqlData = {schoolId:req.body.currentSchoolId, createdAt:new Date(req.body.createdAt), userName: req.body.userName, groupId:req.body.groupId};
+	var saveGroupSqlData = {schoolId:req.body.currentSchoolId, createdAt:new Date(req.body.createdAt), userName: req.body.userName, groupName:req.body.groupName};
 	var saveGroupSqlQuery = "INSERT INTO Grupo SET ?"
+
+	console.log('saveGroupSqlData ' + JSON.stringify(saveGroupSqlData));
 
 	dbapi.connection.query(saveGroupSqlQuery, saveGroupSqlData, (err, rows) => {
 		if(err){
-			return res.send({message:err});
-		} else {
-			return res.send({message:rows});
-		}
-	});
-
-});
-
-app.get('/get-all-groups', (req, res) => {
-
-	var getAllGroupsSqlQuery = "SELECT * FROM Grupo";
-
-	dbapi.connection.query(getAllGroupsSqlQuery, (err, rows) => {
-		if(err){
-			return res.send({message:err});
-		} else {
-			return res.send({message:rows});
-		}
-	});
-});
-
-
-app.get('/get-all-group-students', (req, res) => {
-
-	var getAllGroupStudentsSqlQuery = "SELECT * FROM EstudianteGrupo";
-
-	dbapi.connection.query(getAllGroupStudentsSqlQuery, (err, rows) => {
-		if(err){
-			console.log(err);
-			return res.send({message:err});
-		} else {
-			return res.send({message:rows});
-		}
-	});
-});
-
-app.get('/get-group-for-username', (req, res) => {
-
-	var getAllGroupStudentsSqlQuery = "SELECT * FROM Grupo WHERE userName = "+ mysql.escape(req.query.username) + "AND schoolId = " + mysql.escape(req.query.schoolId);
-
-	dbapi.connection.query(getAllGroupStudentsSqlQuery, (err, rows) => {
-		if(err){
-			console.log(err);
 			return res.send({message:err});
 		} else {
 			console.log(rows);
 			return res.send({message:rows});
 		}
 	});
+
 });
 
-app.get('/get-distinct-groupId', (req, res) => {
 
-	// var getDistinctGroupIdSqlQuery = "SELECT distinct groupId FROM EstudianteGrupo";
-	var getDistinctGroupIdSqlQuery = "SELECT groupId FROM Grupo";
+app.get('/get-students', (req, res) => {
 
-	dbapi.connection.query(getDistinctGroupIdSqlQuery, (err, rows) => {
+	var getAllGroupStudentsSqlQuery = "SELECT * FROM EstudianteGrupo WHERE userName = "+ mysql.escape(req.query.username) + "AND schoolId = " + mysql.escape(req.query.schoolId);
+
+	dbapi.connection.query(getAllGroupStudentsSqlQuery, (err, rows) => {
 		if(err){
+			console.log(err);
+			return res.send({message:err});
+		} else {
+			return res.send({message:rows});
+		}
+	});
+});
+
+app.get('/get-groups', (req, res) => {
+
+	var getAllGroupStudentsSqlQuery = "SELECT * FROM Grupo WHERE userName = "+ mysql.escape(req.query.username) + "AND schoolId = " + mysql.escape(req.query.schoolId);
+
+	dbapi.connection.query(getAllGroupStudentsSqlQuery, (err, rows) => {
+		if(err){
+			console.log(err);
 			return res.send({message:err});
 		} else {
 			return res.send({message:rows});
@@ -743,83 +718,62 @@ app.get('/get-studentIds-for-groupId', (req, res) => {
 		if(err){
 			return res.send({message:err});
 		} else {
-			console.log(rows);
 			return res.send({message:rows});
 		}
 	});
 });
 
-app.post('/save-EstudianteGrupo-data', (req, res) => {
+app.post('/update-group', (req, res) => {
 
 	var groupId = req.body.groupId;
+	var createdAt = req.body.createdAt;	
+	var schoolId = req.body.schoolId;
 	var userName = req.body.userName;
-	var createdAt = new Date(req.body.createdAt);
-	var stToAdd = req.body.studentIdToAdd;
-	var stToRemove = req.body.studentIdToRemove;
-	var school = req.body.school;
+	var students = req.body.students;
 
-	var addArrMain = [];
-	var studentAddedRows, studentRemovedRows;
+	let sqlStudentInGroupDelete = "DELETE FROM EstudianteGrupo WHERE groupId = ?";
+	dbapi.connection.query(sqlStudentInGroupDelete, [groupId], (err, rows) => {
+		if(err) {
+			console.log(err);
+		} else {
 
-	if(stToRemove.length === 0){
-		console.log('No student removed');
-		studentAddedRows = 'No student removed';
-	} else {
-		var sqlRemove = "DELETE FROM EstudianteGrupo WHERE studentId IN (?)"
-		var valuesToRemove = req.body.studentIdToRemove;
-		dbapi.connection.query(sqlRemove, [valuesToRemove], (err, rows) => {
-			if(err){
-				console.log(err);
-			} else {
-				studentAddedRows = rows;
-			}
-		});
-	}
+			// Inserte new students
+			var addArrMain = [];			
+			students.forEach( elem => {
+				let addArr = [];
+				addArr.push(userName);
+				addArr.push(groupId);
+				addArr.push(elem);
+				addArr.push(createdAt);
+				addArr.push(schoolId);
+				addArrMain.push(addArr);
+			});
+	
+			var sqlAdd = "INSERT INTO EstudianteGrupo (userName, groupId, studentId, createdAt, schoolId) VALUES ?";
+			var values = addArrMain;
+			dbapi.connection.query(sqlAdd, [values], (err, rows) => {
+				if(err) {
+					console.log(err);
+				} else {
+					studentRemovedRows = rows;
+				}
+			});
 
-	if(stToAdd.length === 0){
-		studentRemovedRows = 'No student added';
-	} else {
-		stToAdd.forEach( elem => {
-			let addArr = [];
-			addArr.push(userName);
-			addArr.push(groupId);
-			addArr.push(elem);
-			addArr.push(createdAt);
-			addArr.push(school);
-			addArrMain.push(addArr);
-		});
+			return res.send({message: rows});
+		}
+	});
 
-		var sqlAdd = "INSERT INTO EstudianteGrupo (userName, groupId, studentId, createdAt, school) VALUES ?";
-		var values = addArrMain;
-		dbapi.connection.query(sqlAdd, [values], (err, rows) => {
-			if(err) {
-				console.log(err);
-			} else {
-				studentRemovedRows = rows;
-			}
-		});
-	}
-
-	res.send({message:{studentAdded:studentAddedRows, studentRemoved: studentRemovedRows}});
-
-	// var saveEstudianteGrupoData = {userName:req.body.userName ,groupId:req.body.groupId ,studentId:req.body.studentId , createdAt: new Date(req.body.createdAt)}
-	// var saveEstudianteGrupoSqlQuery = "INSERT INTO EstudianteGrupo SET ?";
-
-	// dbapi.connection.query(saveEstudianteGrupoSqlQuery, saveEstudianteGrupoData, (err, rows) => {
-	// 	return res.send({message: rows});
-	// });
 
 });
 
 app.post('/delete-group-and-students-in-it', (req, res) => {
 	let groupId = req.body.groupId;
 
-	let sqlGroupDelete = "DELETE FROM Grupo WHERE groupId = ?"
+	let sqlGroupDelete = "DELETE FROM Grupo WHERE id = ?"
 	dbapi.connection.query(sqlGroupDelete, [groupId], (err, rows) => {
 		if(err){
 			console.log(err);
 		} else {
-			console.log(rows);
 			let sqlStudentInGroupDelete = "DELETE FROM EstudianteGrupo WHERE groupId = ?";
 			dbapi.connection.query(sqlStudentInGroupDelete, [groupId], (err, rows) => {
 				if(err) {
