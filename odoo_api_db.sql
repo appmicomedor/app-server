@@ -92,6 +92,9 @@ CREATE TABLE `EstudianteGrupo` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 ALTER TABLE `EstudianteGrupo`
   ADD PRIMARY KEY (`id`);
+ALTER TABLE `EstudianteGrupo` 
+ADD COLUMN `school` VARCHAR(345) NOT NULL AFTER `createdAt`;
+
 
 CREATE TABLE `Settings` (
   `id` int(11) NOT NULL AUTO_INCREMENT,  

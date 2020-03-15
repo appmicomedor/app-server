@@ -629,35 +629,6 @@ app.get('/get-all-albaranes-list', (req, res) => {
 	});
 });
 
-
-app.post('/save-group', (req, res) => {
-
-	var saveGroupSqlData = {schoolId:req.body.currentSchoolId, createdAt:new Date(req.body.createdAt), userName: req.body.userName, groupId:req.body.groupId};
-	var saveGroupSqlQuery = "INSERT INTO Grupo SET ?"
-
-	dbapi.connection.query(saveGroupSqlQuery, saveGroupSqlData, (err, rows) => {
-		if(err){
-			return res.send({message:err});
-		} else {
-			return res.send({message:rows});
-		}
-	});
-
-});
-
-app.get('/get-all-groups', (req, res) => {
-
-	var getAllGroupsSqlQuery = "SELECT * FROM Grupo";
-
-	dbapi.connection.query(getAllGroupsSqlQuery, (err, rows) => {
-		if(err){
-			return res.send({message:err});
-		} else {
-			return res.send({message:rows});
-		}
-	});
-});
-
 app.get('/get-albaranes-for-id', (req, res) => {
 
 	var gid = req.query.id;
@@ -690,16 +661,34 @@ app.get('/get-albaranes-for-id', (req, res) => {
 
 });
 
-app.get('/get_albaran', function(req, res) {
+app.post('/save-group', (req, res) => {
 
-	var queryDate = req.query.date;
-	var queryCode = req.query.code;
+	var saveGroupSqlData = {schoolId:req.body.currentSchoolId, createdAt:new Date(req.body.createdAt), userName: req.body.userName, groupId:req.body.groupId};
+	var saveGroupSqlQuery = "INSERT INTO Grupo SET ?"
 
-	// var sqlQueryGetAlbaran = "SELECT CONVERT (data USING utf8) AS result FROM albaranes";
-	//console.log(sqlQueryGetAlbaran);
+	dbapi.connection.query(saveGroupSqlQuery, saveGroupSqlData, (err, rows) => {
+		if(err){
+			return res.send({message:err});
+		} else {
+			return res.send({message:rows});
+		}
+	});
 
-	
 });
+
+app.get('/get-all-groups', (req, res) => {
+
+	var getAllGroupsSqlQuery = "SELECT * FROM Grupo";
+
+	dbapi.connection.query(getAllGroupsSqlQuery, (err, rows) => {
+		if(err){
+			return res.send({message:err});
+		} else {
+			return res.send({message:rows});
+		}
+	});
+});
+
 
 app.get('/get-all-group-students', (req, res) => {
 
@@ -710,6 +699,21 @@ app.get('/get-all-group-students', (req, res) => {
 			console.log(err);
 			return res.send({message:err});
 		} else {
+			return res.send({message:rows});
+		}
+	});
+});
+
+app.get('/get-group-for-username', (req, res) => {
+
+	var getAllGroupStudentsSqlQuery = "SELECT * FROM Grupo WHERE userName = "+ mysql.escape(req.query.username) + "AND schoolId = " + mysql.escape(req.query.schoolId);
+
+	dbapi.connection.query(getAllGroupStudentsSqlQuery, (err, rows) => {
+		if(err){
+			console.log(err);
+			return res.send({message:err});
+		} else {
+			console.log(rows);
 			return res.send({message:rows});
 		}
 	});
@@ -752,6 +756,7 @@ app.post('/save-EstudianteGrupo-data', (req, res) => {
 	var createdAt = new Date(req.body.createdAt);
 	var stToAdd = req.body.studentIdToAdd;
 	var stToRemove = req.body.studentIdToRemove;
+	var school = req.body.school;
 
 	var addArrMain = [];
 	var studentAddedRows, studentRemovedRows;
@@ -780,10 +785,11 @@ app.post('/save-EstudianteGrupo-data', (req, res) => {
 			addArr.push(groupId);
 			addArr.push(elem);
 			addArr.push(createdAt);
+			addArr.push(school);
 			addArrMain.push(addArr);
 		});
 
-		var sqlAdd = "INSERT INTO EstudianteGrupo (userName, groupId, studentId, createdAt) VALUES ?";
+		var sqlAdd = "INSERT INTO EstudianteGrupo (userName, groupId, studentId, createdAt, school) VALUES ?";
 		var values = addArrMain;
 		dbapi.connection.query(sqlAdd, [values], (err, rows) => {
 			if(err) {
