@@ -666,13 +666,11 @@ app.post('/save-group', (req, res) => {
 	var saveGroupSqlData = {schoolId:req.body.currentSchoolId, createdAt:new Date(req.body.createdAt), userName: req.body.userName, groupName:req.body.groupName};
 	var saveGroupSqlQuery = "INSERT INTO Grupo SET ?"
 
-	console.log('saveGroupSqlData ' + JSON.stringify(saveGroupSqlData));
 
 	dbapi.connection.query(saveGroupSqlQuery, saveGroupSqlData, (err, rows) => {
 		if(err){
 			return res.send({message:err});
 		} else {
-			console.log(rows);
 			return res.send({message:rows});
 		}
 	});
