@@ -808,6 +808,24 @@ app.get('/check-user-role', (req, res) => {
 	});
 });
 
+///////////////////////////////////////////////////////////////
+// GESTION DE DOCUMENTACION
+///////////////////////////////////////////////////////////////
+
+// Display all documents
+app.get('/docs', (request, response) => {
+
+	console.log(request);
+	var sqlQuery = "SELECT * FROM docs";
+
+	dbapi.connection.query( sqlQuery, (error, result) => {
+        if (error) throw error;
+		 response.send(result);
+		 console.log("resultado docs" + result);
+    });
+});
+
+
 if (process.env['NODE_ENV'] != 'development') {
 	const options = {
 		key: fs.readFileSync("/etc/letsencrypt/live/apptitular.micomedor.net/privkey.pem"),
