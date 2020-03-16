@@ -724,7 +724,7 @@ app.get('/get-studentIds-for-groupId', (req, res) => {
 app.post('/update-group', (req, res) => {
 
 	var groupId = req.body.groupId;
-	var createdAt = req.body.createdAt;	
+	var createdAt = new Date(req.body.createdAt);	
 	var schoolId = req.body.schoolId;
 	var userName = req.body.userName;
 	var students = req.body.students;
